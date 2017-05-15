@@ -1,0 +1,8 @@
+# ignore files 
+exg.py
+ecg_sample.py
+mouseECG1.p
+EKG_testsignals.snd.npy
+EKG_testsignals.snd
+EKGMonitor_mpl.py
+
