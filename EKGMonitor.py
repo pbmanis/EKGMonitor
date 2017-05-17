@@ -32,7 +32,7 @@ import scipy.signal
 import pyqtgraph as pg
 from PyQt4 import QtGui, QtCore
 from pyqtgraph.parametertree import Parameter, ParameterTree
-import sounddevice as sd
+#import sounddevice as sd
 from biosppy.signals import ecg as b_ecg
 
 # perform some initialization and system-dependent activities.
@@ -44,20 +44,20 @@ mode = 'olimex'  # use olimex on arduino
 #mode - 'soundcard'  # use system sound card
 assert mode in ['olimex', 'soundcard']
 
-if mode == 'soundcard':
-    devices = sd.query_devices()
-    print devices
-    opsys = platform.system()
-    if opsys in ['Windows']:
-        sd.default.device = 22  # check but should be rear microphone input
-    elif opsys in ['Darwin']:
-        indev = sd.query_devices(kind='input')
-        sd.default.device = 0, 1  # should be the input
-    else:
-        raise ValueError('Platform %s is not supported', opsys)
+# if mode == 'soundcard':
+#     devices = sd.query_devices()
+#     print devices
+#     opsys = platform.system()
+#     if opsys in ['Windows']:
+#         sd.default.device = 22  # check but should be rear microphone input
+#     elif opsys in ['Darwin']:
+#         indev = sd.query_devices(kind='input')
+#         sd.default.device = 0, 1  # should be the input
+#     else:
+#         raise ValueError('Platform %s is not supported', opsys)
     
-    print 'Using audio input device : %d' % sd.default.device[0]
-    NChannels = 2
+#     print 'Using audio input device : %d' % sd.default.device[0]
+#     NChannels = 2
 
 
 class Arduino():
@@ -139,7 +139,7 @@ class Arduino():
 if mode == 'olimex':
     NChannels = 1
     DEFAULT_BAUDRATE = 115200
-    source = '/dev/cu.usbmodem621'
+    source = 'COM23' # /dev/cu.usbmodem621'
     serial_obj = serial.Serial(source, DEFAULT_BAUDRATE)
     Ard = Arduino(serial_obj)
     Ard.flushbuf()
@@ -396,8 +396,9 @@ class MeasureECG:
                  return
             b = '[' + b + ']'
             ib = np.array(eval(b))
-            self.currentSegment = scipy.signal.decimate(ib, self.decimate)
-            self.sampleFreq = (1./self.fs)/self.decimate
+            self.currentSegment = ib # scipy.signal.decimate(ib, self.decimate)
+            self.currentSegment = self.currentSegment - np.mean(self.currentSegment)
+            self.sampleFreq = (1./self.fs)# /self.decimate
             print self.sampleFreq
             self.lastTimes = np.linspace(0, duration, len(self.currentSegment))
         
@@ -821,7 +822,8 @@ class Updater():
             self.ecg.captureSegment(duration=self.readDuration)
         if self.invertData:
             self.ecg.currentSegment = - self.ecg.currentSegment
-        
+        self.ecg.currentSegment = self.ecg.currentSegment - np.mean(self.ecg.currentSegment) 
+        filtered_signal = self.ecg.currentSegment
         filtered_signal = self.ecg.LPFilter(self.ecg.currentSegment,
                          fc=self.LPFFreq/self.ecg.sampleFreq)
         if self.ecg.NotchEnabled:
@@ -829,6 +831,7 @@ class Updater():
                          fn=self.NotchFreq/self.ecg.sampleFreq)
         ctime = datetime.datetime.now()
         self.runtime = (ctime - self.startTime).seconds/60.
+        self.pltd['plt_first'].plot(self.ecg.lastTimes, filtered_signal, clear=True, pen=pg.mkPen('g'))
         try:  # do analysis on potential ecg signal
             self.out.append(b_ecg.ecg(signal=filtered_signal, sampling_rate=self.ecg.sampleFreq,
                  show=False, before=0.1, after=0.15))
@@ -836,7 +839,7 @@ class Updater():
             print 'No beats detected'
             self.NSamples = self.NSamples + 1
             # then plot to the template window to show us what is really there
-            self.pltd['plt_first'].plot(self.ecg.lastTimes, self.ecg.currentSegment, clear=True)
+            self.pltd['plt_first'].plot(self.ecg.lastTimes, self.ecg.currentSegment, clear=True, pen=pg.mkPen('r'))
             return
         print "%s   %8.1f bpm" % (ctime, np.mean(self.out[-1]['heart_rate']))
         self.runningRate.append(np.mean(self.out[-1]['heart_rate']))

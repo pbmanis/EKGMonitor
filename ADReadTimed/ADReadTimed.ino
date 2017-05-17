@@ -22,7 +22,7 @@ void setup() {
 //  Serial.println("--------------");
   pinMode(A0, INPUT);
   analogReference(INTERNAL); // 1.1 V reference.
-  pinMode(13, OUTPUT);
+ // pinMode(13, OUTPUT);
   clearSampBuf();
 }
 
@@ -72,6 +72,10 @@ void loop() {
     }
     else if (cmd == 'a') { // acquire data
       clearSampBuf();
+      analogRead(A0);
+      // delayMicroseconds(5000.);
+      delay(100);
+      analogRead(A0);
       for (i = 0; i < nSamp; i++) {
         sampBuf[i] = analogRead(A0);
         delayMicroseconds(sampRate);
