@@ -1,0 +1,8 @@
+# ekg Requirements
+
+numpy >= 1.26
+PyQt6
+pyqtgraph
+biosppy
+pyserial
+

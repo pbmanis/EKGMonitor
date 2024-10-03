@@ -8,3 +8,5 @@ EKGMonitor_mpl.py
 ekg_venv/
 *.p
 
+*.egg-info
+
