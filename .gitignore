@@ -7,6 +7,7 @@ EKG_testsignals.snd
 EKGMonitor_mpl.py
 ekg_venv/
 *.p
-
+.mypy_cache
+__pycache__
 *.egg-info
 
