@@ -5,4 +5,6 @@ mouseECG1.p
 EKG_testsignals.snd.npy
 EKG_testsignals.snd
 EKGMonitor_mpl.py
+ekg_venv/
+*.p
 
