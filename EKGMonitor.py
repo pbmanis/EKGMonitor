@@ -139,7 +139,7 @@ class Arduino():
 if mode == 'olimex':
     NChannels = 1
     DEFAULT_BAUDRATE = 115200
-    source = 'COM23' # /dev/cu.usbmodem621'
+    source = 'COM5' # /dev/cu.usbmodem621'
     serial_obj = serial.Serial(source, DEFAULT_BAUDRATE)
     Ard = Arduino(serial_obj)
     Ard.flushbuf()
