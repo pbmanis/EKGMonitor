@@ -153,7 +153,7 @@ if mode == "olimex":
     # Here you must set the device address depending on what system you are using
     # Windows: it will be a COM port; Unix/Linux/MacOS: it will be a /dev/cu.usbmodem#######
 
-    source = "/dev/cu.usbmodem844201"  # 'COM5' # /dev/cu.usbmodem621'
+    source = "/dev/cu.usbmodem244201"  # 'COM5' # /dev/cu.usbmodem621'
     serial_obj = serial.Serial(source, DEFAULT_BAUDRATE)
     Ard = Arduino(serial_obj)
     Ard.flushbuf()
