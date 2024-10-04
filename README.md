@@ -5,7 +5,7 @@ Python code for an EKG monitor for experiments. The monitor can read from a soun
 Originally based on http://www.swharden.com/wp/2009-08-14-diy-ecg-machine-on-the-cheap/
 Some test signals are taken from that project.
 
-Tested on Mac OSX 10.11 with Python 2.7; Windows 7 64 bit Python 2.7
+Tested on Mac OSX 10.11 with Python 3.
 
 Requirements
 ------------
@@ -16,6 +16,7 @@ scipy (filtering)
 biosppy.signals (ecg waveform detection and analysis)
 sounddevice (connections to sound cards)
 
+To run visa, install pyvisa and then get the NIVISA library from NI.
 
 Connections
 -----------
