@@ -8,5 +8,7 @@ pyserial
 pyvisa-py
 zeroconf
 psutil
+sounddevice
+
 
 
