@@ -13,7 +13,9 @@ from pyqtgraph.Qt import QtCore, QtWidgets
 import sounddevice as SD
 import sound
 
-DEFAULT_AUDIO_RATE = 44100  # 96000  # 44100  # in Hz. Mac Mini will do 96K (see via Utility)
+DEFAULT_AUDIO_RATE = (
+    96000  # 44100  # 96000  # 44100  # in Hz. Mac Mini will do 96K (see via Utility)
+)
 THREAD_PERIOD = 20  # thread period, in msec
 
 
@@ -48,47 +50,13 @@ def play_wave(wave, rate):
 
     SD.play(wave, rate)
     SD.wait()  # duration of sound is set by the waveform
-    time.sleep(0.01)
     SD.stop()
-
-
-class WorkerSignals(QRunnable, QObject):
-    """
-    Defines the signals available from a running worker thread.
-
-    Supported signals are:
-
-        finished
-            No data returned
-        error
-            returns tuple (exctype, value, traceback.format_exc() )
-        result
-            returns object data returned from processing, anything
-        paused
-            no data returned
-        resume
-            no data returned
-
-    """
-
-    finished = QtCore.pyqtSignal()
-    error = QtCore.pyqtSignal(tuple)
-    result = QtCore.pyqtSignal(object)
-    paused = QtCore.pyqtSignal()
-    resume = QtCore.pyqtSignal()
-    start = QtCore.pyqtSignal()
-
-    # def __init__(cls):
-    #     super(WorkerSignals, cls).__init__()
-    #     pass
-    # def run(cls):
-    #     pass
 
 
 # threaded class to handle parameter changes while keeping gui open
 # includes ability to pause and resume.
 class Worker(QObject):
-
+    # define signals that we will emit.
     sig_finished = QtCore.pyqtSignal()
     sig_error = QtCore.pyqtSignal(tuple)
     sig_result = QtCore.pyqtSignal(object)
@@ -104,33 +72,37 @@ class Worker(QObject):
 
         """
         super(Worker, self).__init__()
-        self._paused = False  # flag for suspencing thread
         self._running = False  # to stop the event
+        self._quit = False
         self.frequency = 1000.0
         self.old_freq = self.frequency
         self.duration = 0.05
         self.old_dur = self.duration
         self.interval = 0.2
         self.old_interval = self.interval
+        self.stimulus = "Tone"
+        self.old_stimulus = self.stimulus
+        self.dblevel = 100.0
+        self.old_level = self.dblevel
         self.wave = None
-        # self.signals = WorkerSignals()
         self.params = parameters
+
         print("worker init complete...")
 
-    def run(self):
-        pass
-
     @pyqtSlot()
-    def run_stim(self):
+    def run(self):
         """
         Check the parameters periodically (often enough to seem responsive)
         present the stimuli as needed.
         """
-        print("worker run")
-        while self._running:
-            if self._paused:
-                self.signals.paused.emit()
-                break
+        # print("worker: run started")
+        nreps = 0
+        while True:
+            if self._quit:
+                # print("worker: quit set: running ended")
+                return
+            if not self._running:
+                continue
             if self.params.device == "SDG810":
                 self.params.sdg810.write("C1:OUTP ON")
                 self.params.sdg810.query("*OPC?")
@@ -138,85 +110,222 @@ class Worker(QObject):
                 self.params.sdg810.write("C1:OUTP OFF")
             else:
                 # play a sound on the soundcard
-                # print("dur: ", new_dur, "freq; ", new_freq)
                 # only recompute the waveform if uupdate is needed
                 if (
                     (self.frequency != self.old_freq)
                     or self.wave is None
                     or (self.duration != self.old_dur)
+                    or (self.interval != self.old_interval)
+                    or (self.stimulus != self.old_stimulus)
+                    or (self.dblevel != self.old_level)
                 ):
-                    self.wave = sound.TonePip(
-                        rate=DEFAULT_AUDIO_RATE,
-                        f0=self.frequency,
-                        duration=self.duration,
-                        dbspl=None,
-                        pip_duration=self.duration,
-                        pip_starts=[0.0],
-                        ramp_duration=0.005,
-                    )
+                    match self.stimulus:
+                        case "Tone":
+                            self.wave = sound.TonePip(
+                                rate=DEFAULT_AUDIO_RATE,
+                                f0=self.frequency,
+                                duration=self.duration,
+                                dbspl=self.dblevel,
+                                pip_duration=self.duration,
+                                pip_starts=[0.0],
+                                ramp_duration=0.005,
+                            )
+                        case "Noise":
+                            self.wave = sound.NoisePip(
+                                rate=DEFAULT_AUDIO_RATE,
+                                duration=self.duration,
+                                dbspl=self.dblevel,
+                                pip_duration=self.duration,
+                                pip_starts=[0.0],
+                                ramp_duration=0.005,
+                                seed=12345
+                            )
+                        case "Click":
+                            self.wave = sound.ClickTrain(
+                                rate=DEFAULT_AUDIO_RATE,
+                                duration=self.duration,
+                                dbspl=self.dblevel,
+                                click_duration=0.0001,
+                                click_starts=[0.0, self.duration*0.45, self.duration*0.90],
+                            )
+                        case _:
+                            raise ValueError("Unknown stimulus")
+                            self.quit()
+
+                    if self.frequency != self.old_freq:
+                        self.old_freq = self.frequency
+                    if self.duration != self.old_dur:
+                        self.old_dur = self.duration
+                    if self.interval != self.old_interval:
+                        self.old_interval = self.interval
+                    if self.stimulus != self.old_stimulus:
+                        self.old_stimulus = self.stimulus
+                    if self.dblevel != self.old_level:
+                        self.old_level = self.dblevel
+
 
                 play_wave(self.wave.sound, DEFAULT_AUDIO_RATE)
 
             time.sleep(self.interval)
-
-            time.sleep(float(THREAD_PERIOD / 1000.0))  # Short delay to prevent excessive CPU usage
-        print("running ended")
+            nreps += 1
+            # print("nreps: ", nreps)
+            time.sleep(float(THREAD_PERIOD / 1000.0))  # Short delay to allow GUI to process
+        # print("running ended")
 
     @pyqtSlot(float)
     def set_frequency(self, freq: float):
-        print("slot freq")
+        # print("slot freq")
         self.frequency = freq
 
     @pyqtSlot(float)
     def set_duration(self, duration: float):
-        print("slot dur")
+        # print("slot dur")
         self.duration = duration
-        print("... duration: ", duration)
+        # print("... duration: ", duration)
 
     @pyqtSlot(float)
-    def set_interval(self, interval:float):
-        print("slot Interval")
+    def set_interval(self, interval: float):
+        # print("slot Interval")
         self.interval = interval
+    
+    @pyqtSlot(int)
+    def set_level(self, level: int):
+        print("slot level")
+        self.dblevel = level
 
-    # @pyqtSlot()
-    # def start(self):
-    #     print("start called")
-    #     if not self._running:
-    #         self._running = True
-    # self.run()
-    # self.run()
-
-    @pyqtSlot()
-    def pause(self):
-        # pause the thread - during some update operations, and
-        # when transmitting.
-        print("slot pause")
-        self._paused = True  # set False to block the thread
-        self._running = False
-        self.sig_paused.emit()
+    @pyqtSlot(str)
+    def set_stimulus(self, stimulus: str):
+        # print("slot stimulus")
+        self.stimulus = stimulus
 
     @pyqtSlot()
-    def start(self):
+    def start_stim(self):
         """
         Start the thread.
         """
-        print("slot start")
+        # print("slot start_stim")
         if not self._running:
-            print("setting running")
+            # print("setting running")
             self._running = True
-            self._paused = False
-            self.run_stim()
-            self.sig_start.emit()
 
     @pyqtSlot()
-    def stop(self):
+    def stop_stim(self):
         """
-        Stop the thread from running.
+        Stop the run routine from generating stimuli.
         This is needed at the end of the program to terminate cleanly.
         """
-        self._paused = False  # resume if paused
+        # print("slot stop_stim called")
         self._running = False  # set running False
         self.sig_finished.emit()  # send a signal
+
+    @pyqtSlot()
+    def quit(self):
+        """quit: called to end the thread by returning from the run routine."""
+        # print("slot quit called")
+        self._running = False
+        self._quit = True
+        self.sig_finished.emit()
+
+
+class SliderWithValue(pg.QtWidgets.QSlider):
+
+    def __init__(self, parent=None, value_mapper: callable = None):
+        super(SliderWithValue, self).__init__(parent)
+        self.value_mapper = value_mapper
+        self.stylesheet = """
+        QSlider::groove:vertical {
+                background-color: #222;
+                width: 30px;
+        }
+        QSlider::handle:vertical {
+            border: 1px #438f99;
+            border-style: outset;
+            margin: -2px 0;
+            width: 30px;
+            height: 3px;
+            background-color: #438f99;
+        }
+        QSlider::sub-page:vertical {
+            background: #4B4B4B;
+        }
+        QSlider::groove:horizontal {
+                background-color: #222;
+                height: 120px;
+        }
+        QSlider::handle:horizontal {
+            border: 1px #438f99;
+            border-style: outset;
+            margin: -2px 0;
+            width: 3px;
+            height: 10px;
+            background-color: #438f99;
+        }
+        
+        """
+        # this is the color of the area Behind the bar...
+        # QSlider::sub-page:horizontal {
+        #     background: #438f99;
+        # }
+        # 4B4B4B
+        self.setStyleSheet(self.stylesheet)
+        # painter = pg.Qt.QtGui.QPainter(self)
+        # rect = self.geometry()
+        # print(rect)
+        # for tick in [1, 4, 8, 16, 24, 32, 48]:
+        #     painter.drawText(
+        #         pg.Qt.QtCore.QPoint(
+        #             int(tick*1000),
+        #             int(rect.height())),
+        #             str(tick),
+
+        #     )
+        #     path = pg.Qt.QtGui.QPainterPath()
+        #     path.moveTo(tick, rect.height()+20)
+        #     path.lineTo(tick, rect.height()-20)
+        #     painter.drawPath(path)
+        #     item = QtWidgets.QGraphicsPathItem(path)
+        #     item.setBrush(pg.mkBrush(255, 255, 255))
+        #     item.setPen(pg.mkPen(255, 255, 255))
+
+    def paintEvent(self, event):
+        pg.QtWidgets.QSlider.paintEvent(self, event)
+
+        if self.value_mapper is None:
+            curr_value = str(self.value())
+            round_value = round(float(curr_value), 2)
+        else:
+            round_value = self.value_mapper(self.value())[1]  # get string formatted version
+
+        painter = pg.Qt.QtGui.QPainter(self)
+        # painter.setPen(pg.Qt.QtGui.QPen(pg.Qt.QtCore.Qt.white))
+
+        font_metrics = pg.Qt.QtGui.QFontMetrics(self.font())
+        font_width = font_metrics.boundingRect(str(round_value)).width()
+        font_height = font_metrics.boundingRect(str(round_value)).height()
+
+        rect = self.geometry()
+        if self.orientation() == QtCore.Qt.Orientation.Horizontal:
+            horizontal_x_pos = int(self.value() / 2)  # int(rect.width() - font_width - 5)
+            horizontal_y_pos = int(rect.height() * 0.75)  # 0.75)
+
+            painter.drawText(
+                pg.Qt.QtCore.QPoint(horizontal_x_pos, horizontal_y_pos), str(round_value)
+            )
+
+        elif self.orientation() == QtCore.Qt.Orientation.Vertical:
+            # vertical_x_pos = int(rect.width() - font_width - 5)
+            # vertical_y_pos = int(rect.height() * 0.75)
+
+            painter.drawText(
+                pg.Qt.QtCore.QPoint(
+                    int(rect.width() / 2.0 - font_width / 2.0), int(rect.height() + 20)
+                ),
+                str(round_value),
+            )
+        else:
+            pass
+
+        painter.drawRect(rect)
 
 
 # sdg810 = attach_sdg()
@@ -226,9 +335,12 @@ class AudioStimulator(QObject):
     signal_change_frequency = QtCore.pyqtSignal(float)
     signal_change_duration = QtCore.pyqtSignal(float)
     signal_change_interval = QtCore.pyqtSignal(float)
+    signal_change_stimulus = QtCore.pyqtSignal(str)
+    signal_change_level = QtCore.pyqtSignal(int)
     signal_paused = QtCore.pyqtSignal()
     signal_start = QtCore.pyqtSignal()
     signal_stop = QtCore.pyqtSignal()
+    signal_quit = QtCore.pyqtSignal()
 
     def __init__(self):
         # first find the hardware:
@@ -238,6 +350,7 @@ class AudioStimulator(QObject):
             self.device = "SDG810"
         else:
             self.device = "Soundcard"
+        self.stimulus = "Tone"
         print(f"Device is {self.device:s}")
         self.running = False
         self.thread = None
@@ -245,9 +358,16 @@ class AudioStimulator(QObject):
         self.frequency = 1000.0
         self.duration = 0.05
         self.interval = 0.2
+        self.dblevel = 100.0
+        self.maximum_frequency = int(DEFAULT_AUDIO_RATE / 2.0)
+        self.minimum_frequency = 1000.0
+
+        self.max_slider = 1000
+        self.min_slider = 0
+
         super(AudioStimulator, self).__init__()
 
-        ptreewidth = 200
+        ptreewidth = 220
         self.app = pg.mkQApp()
         self.params = [
             {
@@ -255,6 +375,12 @@ class AudioStimulator(QObject):
                 "type": "list",
                 "limits": ["SDG810", "Soundcard"],
                 "value": self.device,
+            },
+            {
+                "name": "Sound Type",
+                "type": "list",
+                "limits": ["Tone", "Noise", "Click"],
+                "value": self.stimulus,
             },
             {"name": "Start", "type": "action"},
             {"name": "Stop", "type": "action"},
@@ -276,6 +402,12 @@ class AudioStimulator(QObject):
                         "limits": [0.1, 0.2, 0.25, 0.5, 1.0],
                         "value": self.interval,
                     },
+                    {
+                        "name": "Level",
+                        "type": "list",
+                        "limits": [40, 50, 60, 70, 80, 90, 100],
+                        "value": self.dblevel,
+                    }
                 ],
             },
         ]
@@ -306,11 +438,45 @@ class AudioStimulator(QObject):
         self.ptree.setMinimumWidth(ptreewidth)
         self.win = pg.QtWidgets.QMainWindow()
         self.win.setWindowTitle("Stimulus Controller")
-        self.win.resize(800, 250)
+        self.win.resize(800, 275)
         self.dockArea = PGD.DockArea()
         self.Dock_Params = PGD.Dock("Params", size=(ptreewidth, 1024))
         self.dockArea.addDock(self.Dock_Params, "left")
         self.Dock_Params.addWidget(self.ptree)
+        self.Dock_Slider = PGD.Dock("Frequency, Intensity", size=(700, 200))
+        # self.app.setStyleSheet("QSlider::handle:horizontal {background-color: white; border:1px solid; height: 20px; width: 20px; margin: -10px 0;}")
+        # self.app.setStyleSheet("QSlider::groove:horizontal {border: 1px solid; height: 10px; margin: 0 px; background-color: black; width: 10px;}")
+        self.freq_slider = SliderWithValue(
+            QtCore.Qt.Orientation.Horizontal,
+            value_mapper=self.map_slider_to_frequency,
+        )  # pg.QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal)
+        self.freq_slider.setMinimum(self.min_slider)
+        self.freq_slider.setMaximum(self.max_slider)
+        self.freq_slider.setValue(self.map_frequency_to_slider(self.frequency))
+        self.freq_slider.setTickPosition(pg.Qt.QtWidgets.QSlider.TickPosition.TicksBelow)
+        self.freq_slider.setSizePolicy(
+            pg.QtWidgets.QSizePolicy.Policy.MinimumExpanding, pg.QtWidgets.QSizePolicy.Policy.Fixed
+        )
+        self.freq_slider.setTickInterval(1)
+        self.freq_slider.setSingleStep(1)
+        self.Dock_Slider.addWidget(self.freq_slider)
+
+        self.dblevel_slider = SliderWithValue(
+            QtCore.Qt.Orientation.Horizontal,
+            value_mapper=None,
+        )  # pg.QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal)
+        self.dblevel_slider.setMinimum(0)
+        self.dblevel_slider.setMaximum(100)
+        self.dblevel_slider.setValue(int(self.dblevel))
+        self.dblevel_slider.setTickPosition(pg.Qt.QtWidgets.QSlider.TickPosition.TicksBelow)
+        self.dblevel_slider.setSizePolicy(
+            pg.QtWidgets.QSizePolicy.Policy.MinimumExpanding, pg.QtWidgets.QSizePolicy.Policy.Fixed
+        )
+        self.dblevel_slider.setTickInterval(5)
+        self.dblevel_slider.setSingleStep(5)
+        self.Dock_Slider.addWidget(self.dblevel_slider)
+    
+        self.dockArea.addDock(self.Dock_Slider, "right")
         self.win.setCentralWidget(self.dockArea)
 
         self.win.show()
@@ -321,54 +487,82 @@ class AudioStimulator(QObject):
         self.timer.setInterval(20)
         self.timer.timeout.connect(self.recurring_timer)
         self.timer.start()
-        print("Gui set up")
 
         self.Stimulation = Worker(parameters=self)
-        # print(dir(self.Stimulation))
-        print("stimulation worker created")
         self.signal_change_frequency.connect(self.Stimulation.set_frequency)
-        print("... 1")
+        self.freq_slider.valueChanged.connect(
+            lambda: self.signal_change_frequency.emit(
+                float(self.map_slider_to_frequency(self.freq_slider.value())[0])
+            )
+        )
+        self.dblevel_slider.valueChanged.connect(
+            lambda: self.signal_change_level.emit(self.dblevel_slider.value())
+        )
+
         self.signal_change_duration.connect(self.Stimulation.set_duration)
-        # print("... 2")
         self.signal_change_interval.connect(self.Stimulation.set_interval)
-        print("... 3")
-        self.signal_paused.connect(self.Stimulation.pause)
-        print("... 4")
-        self.signal_start.connect(self.Stimulation.start)
-        print("... 5")
-        self.Stimulation.sig_finished.connect(self.done)
-        self.signal_stop.connect(self.Stimulation.stop)
-        # self.signal_paused.emit()
-        print("... 6")
-
-        print("signals created")
-        # self.Stimulation.signals.finished.connect(self.done)
-        self.threadpool.start(self.Stimulation.start)  # start reading the updated parameters
-
-        print("thread started")
+        self.signal_change_stimulus.connect(self.Stimulation.set_stimulus)
+        self.signal_change_level.connect(self.Stimulation.set_level)
+        self.signal_start.connect(self.Stimulation.start_stim)
+        self.signal_stop.connect(self.Stimulation.stop_stim)
+        self.signal_quit.connect(self.Stimulation.quit)
+        self.threadpool.start(self.Stimulation.run)  # start reading the updated parameters
 
     def recurring_timer(self):
-        # print("recurring")
-        pass
+        time.sleep(0.01)
 
-    def getdur(self):
-        return self.duration
-    
-    def done(self):
-        pass
+    def map_slider_to_frequency(self, value: int):
+        """done Convert slider value from range 1 to 1000 to frequency in Hz.
+        The slider position is treated as a log scale, so the frequency is
+        calculated as 1000 * 2^(value/
+
+        Parameters
+        ----------
+
+        value : int
+            slider position
+        """
+        # print("value: ", value)
+        # print("min_freq: ", self.minimum_frequency)
+        # print("max_freq: ", self.maximum_frequency)
+        # print("max_slider: ", self.max_slider)
+
+        fr = self.minimum_frequency * (self.maximum_frequency / self.minimum_frequency) ** (
+            value / self.max_slider
+        )
+        frstr = f"{fr:.1f}"
+        return (fr, frstr)
+
+        # min_freq * (max_freq / min_freq) ** (value / max_slider)
+
+    def map_frequency_to_slider(self, freq: float):
+        """map_slider_from_frequency Convert frequency to the slider
+        position.
+
+        Parameters
+        ----------
+        freq : float
+            _description_
+        """
+        return int(
+            self.max_slider
+            * np.log2(freq / self.minimum_frequency)
+            / np.log2(self.maximum_frequency / self.minimum_frequency)
+        )
+
 
     def command_dispatcher(self, param, changes):
-        print("param: ", param)
-        print("changes: ", changes)
         for param, change, data in changes:
             path = self.ptreedata.childPath(param)
-            print("path: ", path)
             match path[0]:
                 case "Device":
                     if data == "SDG810" and self.sdg810 is not None:
                         self.device = data
                     else:
                         self.device = "Soundcard"
+                case "Sound Type":
+                    self.stimulus = data
+                    self.signal_change_stimulus.emit(data)
                 case "Quit":
                     self.quit()
                 case "Start":
@@ -384,35 +578,29 @@ class AudioStimulator(QObject):
                             self.signal_change_duration.emit(float(data))
                         case "Interval":
                             self.signal_change_interval.emit(float(data))
+                        case "Level":
+                            self.signal_change_level.emit(int(data))
                 case _:
                     pass
 
     def start(self):
-        print("***** start called")
+        # print("***** start called")
         self.signal_start.emit()
 
     def stop(self):
-        print("***** stop called")
+        # print("***** stop called")
         self.signal_stop.emit()
-        # self.Stimulation.stop()
-
-    # def get_duration(self, verbose: bool = False):
-    #     return self.duration
-
-    # def get_frequency(self, verbose: bool = False):
-    #     return self.frequency
 
     def quit(self):
-        print("Quitting")
-        self.stop()
+        # print("Quitting")
+        # immediate stop of all stimuli
         if self.sdg810 is not None:
             self.sdg810.write("C1:OUTP OFF")
         else:
-            # SD.wait()
             SD.stop()
+        self.stop()
+        self.signal_quit.emit()
         self.threadpool.waitForDone(5 * THREAD_PERIOD)
-        # if self.thread is not None:
-        #     self.thread.join(2)
         exit()
 
 

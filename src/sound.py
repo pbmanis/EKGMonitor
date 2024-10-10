@@ -1103,7 +1103,7 @@ def piptone(
     return pin
 
 
-def pipnoise(t, ramp, rate, duration, dbspl, pip_dur, pip_starts, seed):
+def pipnoise(t, ramp, rate, duration, dbspl, pip_dur, pip_starts, seed, scale=1.0):
     """
     Create a waveform with multiple sine-ramped noise pips. Output is in
     Pascals.
