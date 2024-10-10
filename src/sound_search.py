@@ -157,7 +157,7 @@ class Worker(QObject):
 
                 play_wave(self.wave.sound, DEFAULT_AUDIO_RATE)
 
-            time.sleep(self.interval - float(THREAD_PERIOD / 1000.0))
+            time.sleep(self.interval)
 
             time.sleep(float(THREAD_PERIOD / 1000.0))  # Short delay to prevent excessive CPU usage
         print("running ended")
