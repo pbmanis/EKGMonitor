@@ -34,6 +34,7 @@ import scipy
 import scipy.signal
 import src.DMR as DMR
 
+SCALE_VOLTAGE = 10.0 # Specifically for using FF1 speaker.
 
 def create(type, **kwds):
     """Create a Sound instance using a key returned by Sound.key()."""
@@ -986,8 +987,13 @@ def pa_to_dbspl(pa, ref=20e-6):
 def dbspl_to_pa(dbspl:float, ref:float=20e-6):
     """Convert dBSPL to Pascals (rms). By default, the reference pressure is
     20 uPa.
+    scale_voltage should be 1.0
+    scale_voltage of 10.0 allows audio output from mac mini, through SA1 styereo
+    power amp, 6db attn, through TDT FF1 (SN1013) speaker to be approximately 100 dB SPL
+    for tone at 1 kHz (and wideband noise) (for search stimulus, not carefully
+    calibrated)) AT A DISTANCE of 5cm from the speaker.
     """
-    pascals =  ref * 10.0 ** (dbspl / 20.0)
+    pascals =  ref * 10.0 ** (dbspl / 20.0) * SCALE_VOLTAGE
     # print(f"dbspl_to_pa: {dbspl:.2f}  ref: {ref:.2e}, pa: {pascals:.3e}")
     return pascals
 

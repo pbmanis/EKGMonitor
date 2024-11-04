@@ -138,7 +138,7 @@ class Worker(QObject):
                                 pip_duration=self.duration,
                                 pip_starts=[0.0],
                                 ramp_duration=0.005,
-                                seed=12345
+                                seed=12345,
                             )
                         case "Click":
                             self.wave = sound.ClickTrain(
@@ -146,7 +146,11 @@ class Worker(QObject):
                                 duration=self.duration,
                                 dbspl=self.dblevel,
                                 click_duration=0.0001,
-                                click_starts=[0.0, self.duration*0.45, self.duration*0.90],
+                                click_starts=[
+                                    0.0,
+                                    self.duration * 0.45,
+                                    self.duration * 0.90,
+                                ],
                             )
                         case _:
                             raise ValueError("Unknown stimulus")
@@ -163,13 +167,14 @@ class Worker(QObject):
                     if self.dblevel != self.old_level:
                         self.old_level = self.dblevel
 
-
                 play_wave(self.wave.sound, DEFAULT_AUDIO_RATE)
 
             time.sleep(self.interval)
             nreps += 1
             # print("nreps: ", nreps)
-            time.sleep(float(THREAD_PERIOD / 1000.0))  # Short delay to allow GUI to process
+            time.sleep(
+                float(THREAD_PERIOD / 1000.0)
+            )  # Short delay to allow GUI to process
         # print("running ended")
 
     @pyqtSlot(float)
@@ -187,10 +192,10 @@ class Worker(QObject):
     def set_interval(self, interval: float):
         # print("slot Interval")
         self.interval = interval
-    
+
     @pyqtSlot(int)
     def set_level(self, level: int):
-        print("slot level")
+        # print("slot level")
         self.dblevel = level
 
     @pyqtSlot(str)
@@ -292,9 +297,11 @@ class SliderWithValue(pg.QtWidgets.QSlider):
 
         if self.value_mapper is None:
             curr_value = str(self.value())
-            round_value = round(float(curr_value), 2)
+            round_value = round(float(curr_value), 1)
         else:
-            round_value = self.value_mapper(self.value())[1]  # get string formatted version
+            round_value = self.value_mapper(self.value())[
+                1
+            ]  # get string formatted version
 
         painter = pg.Qt.QtGui.QPainter(self)
         # painter.setPen(pg.Qt.QtGui.QPen(pg.Qt.QtCore.Qt.white))
@@ -305,11 +312,14 @@ class SliderWithValue(pg.QtWidgets.QSlider):
 
         rect = self.geometry()
         if self.orientation() == QtCore.Qt.Orientation.Horizontal:
-            horizontal_x_pos = int(self.value() / 2)  # int(rect.width() - font_width - 5)
+            horizontal_x_pos = int(
+                self.value() / 2
+            )  # int(rect.width() - font_width - 5)
             horizontal_y_pos = int(rect.height() * 0.75)  # 0.75)
 
             painter.drawText(
-                pg.Qt.QtCore.QPoint(horizontal_x_pos, horizontal_y_pos), str(round_value)
+                pg.Qt.QtCore.QPoint(horizontal_x_pos, horizontal_y_pos),
+                str(round_value),
             )
 
         elif self.orientation() == QtCore.Qt.Orientation.Vertical:
@@ -344,7 +354,9 @@ class AudioStimulator(QObject):
 
     def __init__(self):
         # first find the hardware:
-        self.sdg810 = attach_sdg()  # result will be None if no sdg180 found, then use soundcard
+        self.sdg810 = (
+            attach_sdg()
+        )  # result will be None if no sdg180 found, then use soundcard
         self.event = Event()
         if self.sdg810 is not None:
             self.device = "SDG810"
@@ -393,26 +405,28 @@ class AudioStimulator(QObject):
                     {
                         "name": "Duration",
                         "type": "list",
-                        "limits": [0.02, 0.05, 0.10, 0.20, 0.50, 1.00],
+                        "limits": [0.02, 0.05, 0.10, 0.20, 0.50, 1.00, 2.00, 5.00],
                         "value": self.duration,
                     },
                     {
                         "name": "Interval",
                         "type": "list",
-                        "limits": [0.1, 0.2, 0.25, 0.5, 1.0],
+                        "limits": [0.1, 0.2, 0.25, 0.5, 1.0, 2.0, 2.5, 3.0, 5.0, 10.0],
                         "value": self.interval,
                     },
                     {
                         "name": "Level",
                         "type": "list",
-                        "limits": [40, 50, 60, 70, 80, 90, 100],
+                        "limits": [10, 20, 30, 40, 50, 60, 70, 80, 90, 100],
                         "value": self.dblevel,
-                    }
+                    },
                 ],
             },
         ]
         self.ptree = ParameterTree()
-        self.ptreedata = Parameter.create(name="Models", type="group", children=self.params)
+        self.ptreedata = Parameter.create(
+            name="Models", type="group", children=self.params
+        )
         self.ptree.setStyleSheet(
             """
             QTreeView {
@@ -443,23 +457,40 @@ class AudioStimulator(QObject):
         self.Dock_Params = PGD.Dock("Params", size=(ptreewidth, 1024))
         self.dockArea.addDock(self.Dock_Params, "left")
         self.Dock_Params.addWidget(self.ptree)
-        self.Dock_Slider = PGD.Dock("Frequency, Intensity", size=(700, 200))
+        slider_dock_width = 700
+        self.Dock_Slider = PGD.Dock(
+            "Frequency, Intensity", size=(slider_dock_width, 200)
+        )
         # self.app.setStyleSheet("QSlider::handle:horizontal {background-color: white; border:1px solid; height: 20px; width: 20px; margin: -10px 0;}")
         # self.app.setStyleSheet("QSlider::groove:horizontal {border: 1px solid; height: 10px; margin: 0 px; background-color: black; width: 10px;}")
         self.freq_slider = SliderWithValue(
             QtCore.Qt.Orientation.Horizontal,
             value_mapper=self.map_slider_to_frequency,
         )  # pg.QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal)
+        # print(dir(self.freq_slider))
+
         self.freq_slider.setMinimum(self.min_slider)
         self.freq_slider.setMaximum(self.max_slider)
         self.freq_slider.setValue(self.map_frequency_to_slider(self.frequency))
-        self.freq_slider.setTickPosition(pg.Qt.QtWidgets.QSlider.TickPosition.TicksBelow)
-        self.freq_slider.setSizePolicy(
-            pg.QtWidgets.QSizePolicy.Policy.MinimumExpanding, pg.QtWidgets.QSizePolicy.Policy.Fixed
+        self.freq_slider.setTickPosition(
+            pg.Qt.QtWidgets.QSlider.TickPosition.TicksBelow
         )
+        # self.freq_slider.setSizePolicy(
+        #     pg.QtWidgets.QSizePolicy.Policy.Fixed, pg.QtWidgets.QSizePolicy.Policy.Fixed
+        # )
         self.freq_slider.setTickInterval(1)
         self.freq_slider.setSingleStep(1)
-        self.Dock_Slider.addWidget(self.freq_slider)
+        # set geomentry(x, y , w, h)
+        # self.freq_slider.setGeometry(50, 50, 100, 10)
+        # self.sl_layout = pg.Qt.QtWidgets.QVBoxLayout()
+        self.freq_slider_text = pg.Qt.QtWidgets.QLabel("1000.")
+        self.freq_slider_label = pg.QtWidgets.QLabel("Frequency (Hz) ")
+        self.rhs_label = pg.QtWidgets.QLabel(" ")
+        self.Dock_Slider.addWidget(self.freq_slider_label, 0, 0, 1, 1)
+        self.Dock_Slider.addWidget(self.freq_slider_text, 0, 1, 1, 1)
+        self.Dock_Slider.addWidget(self.freq_slider, 1, 1, 1, 5)
+        self.Dock_Slider.addWidget(self.rhs_label, 0, 6, 1, 1)
+        # self.Dock_Slider.layout.addItem(pg.Qt.QtWidgets.QSpacerItem())
 
         self.dblevel_slider = SliderWithValue(
             QtCore.Qt.Orientation.Horizontal,
@@ -468,20 +499,33 @@ class AudioStimulator(QObject):
         self.dblevel_slider.setMinimum(0)
         self.dblevel_slider.setMaximum(100)
         self.dblevel_slider.setValue(int(self.dblevel))
-        self.dblevel_slider.setTickPosition(pg.Qt.QtWidgets.QSlider.TickPosition.TicksBelow)
-        self.dblevel_slider.setSizePolicy(
-            pg.QtWidgets.QSizePolicy.Policy.MinimumExpanding, pg.QtWidgets.QSizePolicy.Policy.Fixed
+        self.dblevel_slider.setTickPosition(
+            pg.Qt.QtWidgets.QSlider.TickPosition.TicksBelow
         )
+        # self.dblevel_slider.setSizePolicy(
+        #     pg.QtWidgets.QSizePolicy.Policy.Fixed, pg.QtWidgets.QSizePolicy.Fixed
+        # )
         self.dblevel_slider.setTickInterval(5)
         self.dblevel_slider.setSingleStep(5)
         self.Dock_Slider.addWidget(self.dblevel_slider)
-    
+        self.dblevel_slider_text = pg.Qt.QtWidgets.QLabel("100.0")
+        self.dblevel_slider_label = pg.Qt.QtWidgets.QLabel("Intensity (dbSPL)  ")
+        self.Dock_Slider.addWidget(self.dblevel_slider_label, 2, 0, 1, 1)
+        self.Dock_Slider.addWidget(self.dblevel_slider_text, 2, 1, 1, 1)
+        self.Dock_Slider.addWidget(self.dblevel_slider, 3, 1, 1, 5)
+
+        # self.Dock_Slider.layout.addItem(pg.Qt.QtWidgets.QSpacerItem(slider_dock_width, 50,
+        #                                                      pg.Qt.QtWidgets.QSizePolicy.Policy.Fixed,
+        #                                                      pg.Qt.QtWidgets.QSizePolicy.Policy.Expanding))
+
         self.dockArea.addDock(self.Dock_Slider, "right")
         self.win.setCentralWidget(self.dockArea)
 
         self.win.show()
         self.ptreedata.sigTreeStateChanged.connect(self.command_dispatcher)
-        self.threadpool = QThreadPool()  # threadpool will be instantiated in the start routine
+        self.threadpool = (
+            QThreadPool()
+        )  # threadpool will be instantiated in the start routine
 
         self.timer = pg.Qt.QtCore.QTimer()
         self.timer.setInterval(20)
@@ -495,8 +539,18 @@ class AudioStimulator(QObject):
                 float(self.map_slider_to_frequency(self.freq_slider.value())[0])
             )
         )
+        self.freq_slider.valueChanged.connect(
+            lambda: self.freq_slider_text.setText(
+                f"{float(self.map_slider_to_frequency(self.freq_slider.value())[0]):.1f}"
+            )
+        )
         self.dblevel_slider.valueChanged.connect(
-            lambda: self.signal_change_level.emit(self.dblevel_slider.value())
+            lambda: self.signal_change_level.emit(self.dblevel_slider.value()),
+        )
+        self.dblevel_slider.valueChanged.connect(
+            lambda: self.dblevel_slider_text.setText(
+                f"{float(self.dblevel_slider.value()):.1f}"
+            )
         )
 
         self.signal_change_duration.connect(self.Stimulation.set_duration)
@@ -506,7 +560,9 @@ class AudioStimulator(QObject):
         self.signal_start.connect(self.Stimulation.start_stim)
         self.signal_stop.connect(self.Stimulation.stop_stim)
         self.signal_quit.connect(self.Stimulation.quit)
-        self.threadpool.start(self.Stimulation.run)  # start reading the updated parameters
+        self.threadpool.start(
+            self.Stimulation.run
+        )  # start reading the updated parameters
 
     def recurring_timer(self):
         time.sleep(0.01)
@@ -527,9 +583,9 @@ class AudioStimulator(QObject):
         # print("max_freq: ", self.maximum_frequency)
         # print("max_slider: ", self.max_slider)
 
-        fr = self.minimum_frequency * (self.maximum_frequency / self.minimum_frequency) ** (
-            value / self.max_slider
-        )
+        fr = self.minimum_frequency * (
+            self.maximum_frequency / self.minimum_frequency
+        ) ** (value / self.max_slider)
         frstr = f"{fr:.1f}"
         return (fr, frstr)
 
@@ -549,7 +605,6 @@ class AudioStimulator(QObject):
             * np.log2(freq / self.minimum_frequency)
             / np.log2(self.maximum_frequency / self.minimum_frequency)
         )
-
 
     def command_dispatcher(self, param, changes):
         for param, change, data in changes:
